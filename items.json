@@ -1,0 +1,54 @@
+{
+  "items": [
+    {
+      "id": "r01",
+      "title": "UV 流动",
+      "done": false
+    },
+    {
+      "id": "r02",
+      "title": "遮罩",
+      "done": false
+    },
+    {
+      "id": "r03",
+      "title": "纹理扭曲",
+      "done": false
+    },
+    {
+      "id": "r04",
+      "title": "序列帧动画",
+      "done": false
+    },
+    {
+      "id": "r05",
+      "title": "顶点动画（可提前）",
+      "done": false
+    },
+    {
+      "id": "r06",
+      "title": "硬边溶解",
+      "done": false
+    },
+    {
+      "id": "r07",
+      "title": "软溶解",
+      "done": false
+    },
+    {
+      "id": "r08",
+      "title": "光边溶解",
+      "done": false
+    },
+    {
+      "id": "r09",
+      "title": "切边软化 / 软粒子",
+      "done": false
+    },
+    {
+      "id": "r10",
+      "title": "热扭曲（屏幕扭曲）",
+      "done": false
+    }
+  ]
+}
