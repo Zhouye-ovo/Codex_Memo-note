@@ -48,3 +48,10 @@ TAB_WIDTH = 8
 DOCK_SNAP = 20
 REVEAL_MS = 180
 DOCK_MS = 220
+
+# ---------- 峰谷指示灯 / 倒计时弹窗 ----------
+PEAK_RED = "#B05248"          # 低饱和红（高峰）
+TROUGH_GREEN = "#4E8A63"      # 低饱和绿（低谷）
+POPUP_RED = "#C4504A"         # 弹窗强调红
+POPUP_BG = "#0A0B0D"          # 纯黑冷灰底
+INDICATOR_RING = "#282B2F"    # 指示灯金属环

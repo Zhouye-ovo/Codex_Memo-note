@@ -47,7 +47,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import skin
+from datetime import datetime
+
+from . import schedule, skin
 from .config import Config
 from .store import Item, ItemStore
 
@@ -787,6 +789,176 @@ class TableWindow(QWidget):
         self.closed.emit()
         super().closeEvent(event)
 
+class IndicatorDot(QWidget):
+    """工业风峰谷指示灯（红=高峰 / 绿=低谷，低饱和）。"""
+
+    hovered = Signal()
+    left = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(14, 14)
+        self._trough = True
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_trough(self, on: bool) -> None:
+        self._trough = on
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(QPen(QColor(skin.INDICATOR_RING), 1.5))
+        p.setBrush(QColor(18, 20, 24))
+        p.drawEllipse(QRectF(1, 1, 12, 12))
+        color = QColor(skin.TROUGH_GREEN if self._trough else skin.PEAK_RED)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(color)
+        p.drawEllipse(QRectF(4, 4, 6, 6))
+        p.setBrush(QColor(255, 255, 255, 26))
+        p.drawEllipse(QRectF(4.5, 3.8, 5, 2.6))
+
+    def enterEvent(self, event) -> None:
+        self.hovered.emit()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.left.emit()
+        super().leaveEvent(event)
+
+
+class CountdownPopup(QWidget):
+    """流浪地球工业风倒计时弹窗（纯黑冷灰、红竖线分隔、锐利无光晕）。"""
+
+    def __init__(self, cfg: Config) -> None:
+        super().__init__(None)
+        self._trough = True
+        self._hours = 0
+        self._hhmm = "00:00"
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+        if cfg.topmost:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setFixedSize(300, 112)
+        self._hide_timer = QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.setInterval(200)
+        self._hide_timer.timeout.connect(self._do_hide)
+
+    def set_data(self, trough: bool, hours: int, hhmm: str) -> None:
+        self._trough = trough
+        self._hours = hours
+        self._hhmm = hhmm
+        self.update()
+
+    def position_near(self, anchor: QWidget) -> None:
+        scr = QGuiApplication.screenAt(anchor.mapToGlobal(QPoint(0, 0))) or QApplication.primaryScreen()
+        g = scr.availableGeometry()
+        ax = anchor.mapToGlobal(QPoint(0, 0)).x()
+        ay = anchor.mapToGlobal(QPoint(0, 0)).y()
+        aw, ah = anchor.width(), anchor.height()
+        right_space = g.right() - (ax + aw)
+        left_space = ax - g.left()
+        margin = 8
+        if right_space >= self.width() + margin or right_space >= left_space:
+            x = ax + aw + margin
+        else:
+            x = ax - margin - self.width()
+        x = max(g.left(), min(x, g.right() - self.width()))
+        y = ay + ah - self.height()
+        y = max(g.top(), min(y, g.bottom() - self.height()))
+        self.move(x, y)
+
+    def schedule_hide(self) -> None:
+        self._hide_timer.start()
+
+    def cancel_hide(self) -> None:
+        self._hide_timer.stop()
+
+    def _do_hide(self) -> None:
+        if self.isVisible() and self.geometry().contains(QCursor.pos()):
+            return
+        self.hide()
+
+    def enterEvent(self, event) -> None:
+        self.cancel_hide()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.schedule_hide()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(self.rect())
+        path = QPainterPath()
+        path.addRoundedRect(rect, 10, 10)
+        p.setClipPath(path)
+        bg = QColor(skin.POPUP_BG)
+        bg.setAlpha(skin.BG_ALPHA)
+        p.fillRect(rect, bg)
+        p.setClipping(False)
+
+        right = self.width() - 20
+        red = QColor(skin.POPUP_RED)
+        white = QColor("#FFFFFF")
+
+        f_cn = QFont("SimHei", 18, QFont.Weight.Bold)
+        f_title = QFont("SimHei", 20, QFont.Weight.Bold)
+        f_num = QFont("Bahnschrift", 44, QFont.Weight.Bold)
+        f_en = QFont("Bahnschrift", 11, QFont.Weight.Bold)
+        f_en.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+
+        title = "距离高峰" if self._trough else "距离低谷期"
+        p.setFont(f_title)
+        p.setPen(white)
+        tw = p.fontMetrics().horizontalAdvance(title)
+        p.drawText(QRectF(right - tw, 10, tw, 32),
+                   Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, title)
+
+        y2 = 46
+        h2 = 50
+        p.setFont(f_cn)
+        w_hours_cn = p.fontMetrics().horizontalAdvance("小时")
+        p.setPen(white)
+        p.drawText(QRectF(right - w_hours_cn, y2, w_hours_cn, h2),
+                   Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, "小时")
+        x = right - w_hours_cn - 12
+        x -= 2
+        p.setPen(QPen(red, 2))
+        p.drawLine(QPointF(x, y2 + 8), QPointF(x, y2 + h2 - 8))
+        x -= 12
+        p.setFont(f_num)
+        p.setPen(red)
+        num = str(self._hours)
+        w_num = p.fontMetrics().horizontalAdvance(num)
+        x -= w_num
+        p.drawText(QRectF(x, y2 - 4, w_num, h2),
+                   Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, num)
+        x -= 12
+        x -= 2
+        p.setPen(QPen(red, 2))
+        p.drawLine(QPointF(x, y2 + 8), QPointF(x, y2 + h2 - 8))
+        x -= 12
+        p.setFont(f_cn)
+        p.setPen(white)
+        w_left = p.fontMetrics().horizontalAdvance("还剩")
+        x -= w_left
+        p.drawText(QRectF(x, y2, w_left, h2),
+                   Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, "还剩")
+
+        tail = "PEAK" if self._trough else "TROUGH"
+        en = f"REMAINING {self._hhmm} UNTIL {tail}"
+        p.setFont(f_en)
+        p.setPen(white)
+        ew = p.fontMetrics().horizontalAdvance(en)
+        p.drawText(QRectF(right - ew, 90, ew, 18),
+                   Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, en)
+
+
 class MainWindow(QWidget):
     def __init__(self, cfg: Config, store: ItemStore) -> None:
         super().__init__()
@@ -828,9 +1000,19 @@ class MainWindow(QWidget):
         self._dock_timer.setInterval(150)
         self._dock_timer.timeout.connect(self._poll_dock)
 
+        self.dot = IndicatorDot(self)
+        self.dot.hovered.connect(self._show_popup)
+        self.dot.left.connect(self._schedule_popup_hide)
+        self.popup = CountdownPopup(self.cfg)
+        self.schedule_timer = QTimer(self)
+        self.schedule_timer.setInterval(30000)
+        self.schedule_timer.timeout.connect(self._refresh_schedule)
+        self.schedule_timer.start()
+
         self._build_ui()
         self._apply_layout()
         self._refresh()
+        self._refresh_schedule()
         self._apply_pos()
         if QApplication.platformName() != "offscreen":
             self._setup_tray()
@@ -914,6 +1096,8 @@ class MainWindow(QWidget):
         list_top = top + skin.TOPBAR_H + 6
         self.scroll.setGeometry(8, list_top, W - 16, H - 8 - list_top)
         self.empty_hint.setGeometry(self.scroll.viewport().rect())
+        self.dot.move(12, H - 8 - self.dot.height())
+        self.dot.raise_()
         self._handles["tl"].move(0, 0)
         self._handles["tr"].move(W - HANDLE, 0)
         self._handles["bl"].move(0, H - HANDLE)
@@ -1002,6 +1186,30 @@ class MainWindow(QWidget):
             self._drag_active = False
             chip.set_drag_visual(False)
 
+    # ---------- 峰谷倒计时 ----------
+    def _refresh_schedule(self) -> None:
+        now = datetime.now()
+        trough = schedule.is_trough(now)
+        self.dot.set_trough(trough)
+        target = schedule.next_peak_start(now) if trough else schedule.next_trough_start(now)
+        hours, hhmm = schedule.remaining_to(target, now)
+        self.popup.set_data(trough, hours, hhmm)
+
+    def _show_popup(self) -> None:
+        self._refresh_schedule()
+        self.popup.position_near(self)
+        self.popup.show()
+        self.popup.raise_()
+        self.popup.cancel_hide()
+
+    def _schedule_popup_hide(self) -> None:
+        self.popup.schedule_hide()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        if hasattr(self, "popup") and self.popup.isVisible():
+            self.popup.position_near(self)
+
     # ---------- 表格独立窗口 ----------
     def _toggle_table(self) -> None:
         if self._table_win is None:
@@ -1037,6 +1245,7 @@ class MainWindow(QWidget):
             self._table_win.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, self.cfg.topmost)
             if self._table_win.isVisible():
                 self._table_win.show()
+        self.popup.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, self.cfg.topmost)
         self.cfg.save()
     # ---------- 四角缩放 ----------
     def _start_resize(self, corner, gpos) -> None:
@@ -1280,6 +1489,7 @@ class MainWindow(QWidget):
             self._dock_timer.stop()
             if self._table_win is not None:
                 self._table_win.hide()
+            self.popup.hide()
             self.hide()
         else:
             self.show()
@@ -1291,6 +1501,7 @@ class MainWindow(QWidget):
         self._dock_timer.stop()
         if self._table_win is not None:
             self._table_win.close()
+        self.popup.close()
         self.cfg.pos = [self.x(), self.y()]
         self.cfg.save()
         self.store.save()
