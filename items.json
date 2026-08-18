@@ -8,12 +8,12 @@
     {
       "id": "r02",
       "title": "遮罩",
-      "done": false
+      "done": true
     },
     {
       "id": "r03",
       "title": "纹理扭曲",
-      "done": false
+      "done": true
     },
     {
       "id": "r04",
@@ -48,6 +48,21 @@
     {
       "id": "r10",
       "title": "热扭曲（屏幕扭曲）",
+      "done": false
+    },
+    {
+      "id": "ea99ab01",
+      "title": "遮罩pro",
+      "done": true
+    },
+    {
+      "id": "d111e3a1",
+      "title": "基础PBR",
+      "done": false
+    },
+    {
+      "id": "3d4d4bcd",
+      "title": "FLOW MAP",
       "done": false
     }
   ]
